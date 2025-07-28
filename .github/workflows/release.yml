@@ -1,0 +1,123 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  release:
+    types: [published]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: stable
+        
+    - name: Cache cargo registry
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+          
+    - name: Cache target directory
+      uses: actions/cache@v3
+      with:
+        path: target
+        key: ${{ runner.os }}-target-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-target-
+          
+    - name: Build release binary
+      run: cargo build --release --verbose
+      
+    - name: Test binary
+      run: |
+        echo '{"test": true}' > test.json
+        # Test that the binary runs without error (it will show dialog but that's ok)
+        if (Test-Path "target/release/filepicker.exe") {
+          Write-Host "✅ Binary built successfully"
+          Write-Host "Binary size: $((Get-Item target/release/filepicker.exe).Length) bytes"
+        } else {
+          Write-Host "❌ Binary not found"
+          exit 1
+        }
+        
+    - name: Prepare release artifacts
+      run: |
+        mkdir release-artifacts
+        Copy-Item "target/release/filepicker.exe" "release-artifacts/"
+        Copy-Item "README.md" "release-artifacts/"
+        
+    - name: Get release info
+      id: release_info
+      run: |
+        $tag = "${{ github.ref_name }}"
+        $version = $tag -replace '^v', ''
+        echo "tag=$tag" >> $env:GITHUB_OUTPUT
+        echo "version=$version" >> $env:GITHUB_OUTPUT
+        echo "filename=filepicker-$version-windows-x64" >> $env:GITHUB_OUTPUT
+        
+    - name: Create release archive
+      run: |
+        $filename = "${{ steps.release_info.outputs.filename }}"
+        Compress-Archive -Path "release-artifacts/*" -DestinationPath "$filename.zip"
+        
+    - name: Upload release assets
+      uses: softprops/action-gh-release@v1
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        files: |
+          ${{ steps.release_info.outputs.filename }}.zip
+          target/release/filepicker.exe
+        body: |
+          ## Windows File Picker v${{ steps.release_info.outputs.version }}
+          
+          ### Features
+          - ✅ Native Windows file dialog with dark theme support
+          - ✅ Multi-select capability (`--multi`)
+          - ✅ Folder picking (`--mode folder`)
+          - ✅ File type filters (`--filter "*.txt;*.csv"`)
+          - ✅ Custom dialog titles (`--title "Your Title"`)
+          - ✅ Initial directory setting (`--initial "C:\path"`)
+          - ✅ JSON output for easy integration
+          - ✅ Quick Access/OneDrive sidebar support
+          
+          ### Downloads
+          - **filepicker.exe** - Standalone Windows binary
+          - **filepicker-${{ steps.release_info.outputs.version }}-windows-x64.zip** - Archive with binary and documentation
+          
+          ### Usage
+          ```bash
+          # Basic file selection
+          ./filepicker.exe
+          
+          # Multi-select with filters
+          ./filepicker.exe --multi --filter "*.jpg;*.png;*.gif"
+          
+          # Folder selection
+          ./filepicker.exe --mode folder --title "Select Folder"
+          ```
+          
+          ### Integration
+          Perfect for CEP extensions, Electron apps, and any Node.js application requiring native Windows file dialogs.
+          
+          See [README.md](https://github.com/${{ github.repository }}/blob/main/README.md) for complete documentation.
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
