@@ -1,7 +1,8 @@
 # Windows File Picker
 
 A minimal Windows binary for file picking using native IFileDialog APIs, built in Rust. Provides the same dark-themed dialog as File Explorer with Quick Access/OneDrive sidebar, multi-select, folder picking, file filters, and initial directory support.
-The main reason for this binary is because native CEP file picker opens outdated dialog.
+
+![Windows File Picker UI](/img/ui.png){: style="max-height: 500px;"}
 
 ## Features
 
